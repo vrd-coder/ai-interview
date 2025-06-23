@@ -1,8 +1,8 @@
 import streamlit as st
 import openai
-import os
+import tempfile
 
-# Set your OpenAI API key from Streamlit secrets
+# Set OpenAI API key
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 # Streamlit UI
@@ -16,22 +16,25 @@ The AI will **transcribe it** and **suggest a professional answer**.
 uploaded_file = st.file_uploader("🎙️ Upload WAV file", type=["wav"])
 
 if uploaded_file is not None:
-    st.audio(uploaded_file, format='audio/wav')
+    st.audio(uploaded_file, format="audio/wav")
 
     with st.spinner("🔍 Transcribing your question..."):
-        # Save uploaded file temporarily
-        with open("temp.wav", "wb") as f:
-            f.write(uploaded_file.read())
-
-        # Transcribe with OpenAI Whisper
-        audio_file = open("temp.wav", "rb")
         try:
-            transcript = openai.Audio.transcribe("whisper-1", audio_file)
+            # Save to a temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+                tmp_file.write(uploaded_file.getbuffer())
+                tmp_path = tmp_file.name
+
+            # Transcribe using Whisper
+            with open(tmp_path, "rb") as audio_file:
+                transcript = openai.Audio.transcribe("whisper-1", audio_file)
             question = transcript["text"]
+
             st.subheader("📝 Transcribed Question:")
             st.write(question)
+
         except Exception as e:
-            st.error("❌ Failed to transcribe audio.")
+            st.error(f"❌ Failed to transcribe audio: {e}")
             st.stop()
 
     with st.spinner("🤖 Generating interview answer..."):
@@ -44,7 +47,9 @@ if uploaded_file is not None:
                 ]
             )
             answer = response["choices"][0]["message"]["content"]
+
             st.subheader("✅ Suggested Answer:")
             st.write(answer)
+
         except Exception as e:
-            st.error("❌ Failed to generate answer from AI.")
+            st.error(f"❌ Failed to generate answer: {e}")
