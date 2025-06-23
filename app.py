@@ -4,47 +4,55 @@ import speech_recognition as sr
 import tempfile
 import os
 
-openai.api_key = "YOUR_OPENAI_API_KEY"
+# Set up page
+st.set_page_config(page_title="🎤 AI Interview Assistant", layout="centered")
+st.title("🎤 AI Interview Assistant")
 
-st.set_page_config(page_title="AI Interview Assistant", layout="centered")
-st.title("🎙️ AI Interview Assistant (Live Speech to Text)")
+# Use secret for API key (set in Streamlit Cloud)
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
-st.markdown(\"\"\"
-This tool listens to the interviewer's voice, transcribes the question, and generates a text-based answer using GPT-4.
-\"\"\")
+st.markdown("""
+Upload a short **WAV audio** of the interviewer asking a question.
 
-audio_bytes = st.audio(label="🎤 Speak your question", format="audio/wav")
+The AI will transcribe it and suggest a professional answer.
+""")
 
-if audio_bytes:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-        temp_audio.write(audio_bytes.read())
-        audio_path = temp_audio.name
+# Upload the audio file
+audio_file = st.file_uploader("🎙️ Upload WAV file", type=["wav"])
 
+if audio_file:
+    # Save uploaded file to a temp location
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_file:
+        temp_file.write(audio_file.read())
+        temp_path = temp_file.name
+
+    # Use SpeechRecognition to transcribe
     recognizer = sr.Recognizer()
-    with sr.AudioFile(audio_path) as source:
+    with sr.AudioFile(temp_path) as source:
         audio_data = recognizer.record(source)
-    try:
-        question = recognizer.recognize_google(audio_data)
-        st.success(f"Transcribed Question: {question}")
 
+    try:
+        # Transcribe the question
+        question = recognizer.recognize_google(audio_data)
+        st.success(f"Transcribed: {question}")
+
+        # Send to GPT-4
         with st.spinner("Generating answer..."):
             response = openai.ChatCompletion.create(
                 model="gpt-4",
                 messages=[
-                    {"role": "user", "content": f"You are in a job interview. The interviewer asks: '{question}'. Respond professionally and concisely."}
+                    {"role": "system", "content": "You are a helpful assistant helping a job candidate."},
+                    {"role": "user", "content": f"In a job interview, the interviewer asks: '{question}'. Suggest a smart, confident answer."}
                 ],
                 temperature=0.6
             )
             answer = response["choices"][0]["message"]["content"]
 
-        st.markdown("### ✅ AI's Suggested Answer:")
+        st.markdown("### ✅ Suggested Answer:")
         st.write(answer)
 
-    except sr.UnknownValueError:
-        st.error("Could not understand the audio.")
-    except sr.RequestError as e:
-        st.error(f"Request Error: {e}")
+    except Exception as e:
+        st.error(f"❌ Error: {str(e)}")
+
     finally:
-        os.remove(audio_path)
-else:
-    st.info("Please speak or upload a question to begin.")
+        os.remove(temp_path)
